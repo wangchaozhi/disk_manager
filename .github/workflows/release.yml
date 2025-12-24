@@ -1,0 +1,183 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-backend:
+    name: Build Backend (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact_name: disk-manager-backend-linux
+            asset_name: disk-manager-backend-linux
+            target_path: backed/target/release/backed
+          - os: windows-latest
+            artifact_name: disk-manager-backend-windows
+            asset_name: disk-manager-backend-windows.exe
+            target_path: backed/target/release/backed.exe
+          - os: macos-latest
+            artifact_name: disk-manager-backend-macos
+            asset_name: disk-manager-backend-macos
+            target_path: backed/target/release/backed
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build Backend
+        run: |
+          cd backed
+          cargo build --release
+
+      - name: Rename Binary
+        run: mv ${{ matrix.target_path }} ${{ matrix.asset_name }}
+        shell: bash
+
+      - name: Upload Backend Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.asset_name }}
+
+  build-frontend-android:
+    name: Build Frontend (Android)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build APK
+        run: flutter build apk --release
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: disk-manager-android
+          path: build/app/outputs/flutter-apk/app-release.apk
+
+  build-frontend-desktop:
+    name: Build Frontend (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            platform: windows
+            artifact_name: disk-manager-windows
+            build_output: build/windows/runner/Release
+          - os: ubuntu-latest
+            platform: linux
+            artifact_name: disk-manager-linux
+            build_output: build/linux/x64/release/bundle
+          - os: macos-latest
+            platform: macos
+            artifact_name: disk-manager-macos
+            build_output: build/macos/Build/Products/Release/disk_manager.app
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Install Linux Dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build Desktop App
+        run: flutter build ${{ matrix.platform }} --release
+
+      # Packaging
+      - name: Compress Windows Build
+        if: matrix.os == 'windows-latest'
+        run: Compress-Archive -Path "${{ matrix.build_output }}\*" -DestinationPath disk-manager-windows.zip
+
+      - name: Compress Linux Build
+        if: matrix.os == 'ubuntu-latest'
+        run: tar -czf disk-manager-linux.tar.gz -C ${{ matrix.build_output }} .
+
+      - name: Compress macOS Build
+        if: matrix.os == 'macos-latest'
+        run: zip -r disk-manager-macos.zip ${{ matrix.build_output }}
+
+      # Upload
+      - name: Upload Windows Artifact
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: disk-manager-windows.zip
+
+      - name: Upload Linux Artifact
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: disk-manager-linux.tar.gz
+
+      - name: Upload macOS Artifact
+        if: matrix.os == 'macos-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: disk-manager-macos.zip
+
+  release:
+    name: Create Release
+    needs: [build-backend, build-frontend-android, build-frontend-desktop]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Display structure of downloaded files
+        run: ls -R artifacts
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/disk-manager-backend-linux/disk-manager-backend-linux
+            artifacts/disk-manager-backend-windows/disk-manager-backend-windows.exe
+            artifacts/disk-manager-backend-macos/disk-manager-backend-macos
+            artifacts/disk-manager-android/app-release.apk
+            artifacts/disk-manager-windows/disk-manager-windows.zip
+            artifacts/disk-manager-linux/disk-manager-linux.tar.gz
+            artifacts/disk-manager-macos/disk-manager-macos.zip
+          draft: false
+          prerelease: false
+          generate_release_notes: true

@@ -34,24 +34,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install dependencies (Linux)
+      - name: Install Cross (Linux)
         if: matrix.os == 'ubuntu-latest'
-        run: sudo apt-get update && sudo apt-get install -y musl-tools
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-            targets: ${{ matrix.target }}
+        run: cargo install cross
 
       - name: Build Backend (Linux)
         if: matrix.os == 'ubuntu-latest'
         run: |
-          sudo apt-get install -y g++-multilib
           cd backed
-          export CC=x86_64-linux-musl-gcc
-          export CXX=x86_64-linux-musl-g++
-          export AR=x86_64-linux-musl-ar
-          cargo build --release --target ${{ matrix.target }}
+          cross build --release --target ${{ matrix.target }}
 
       - name: Build Backend (Windows/macOS)
         if: matrix.os != 'ubuntu-latest'

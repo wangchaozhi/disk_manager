@@ -87,7 +87,7 @@ jobs:
           - os: windows-latest
             platform: windows
             artifact_name: disk-manager-windows
-            build_output: build/windows/runner/Release
+            build_output: build/windows/x64/runner/Release
           - os: ubuntu-latest
             platform: linux
             artifact_name: disk-manager-linux

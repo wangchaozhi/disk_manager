@@ -18,26 +18,35 @@ jobs:
           - os: ubuntu-latest
             artifact_name: disk-manager-backend-linux
             asset_name: disk-manager-backend-linux
-            target_path: backed/target/release/backed
+            target_path: backed/target/x86_64-unknown-linux-musl/release/backed
+            target: x86_64-unknown-linux-musl
           - os: windows-latest
             artifact_name: disk-manager-backend-windows
             asset_name: disk-manager-backend-windows.exe
             target_path: backed/target/release/backed.exe
+            target: x86_64-pc-windows-msvc
           - os: macos-latest
             artifact_name: disk-manager-backend-macos
             asset_name: disk-manager-backend-macos
             target_path: backed/target/release/backed
+            target: x86_64-apple-darwin
 
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install dependencies (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+            targets: ${{ matrix.target }}
 
       - name: Build Backend
         run: |
           cd backed
-          cargo build --release
+          cargo build --release --target ${{ matrix.target }}
 
       - name: Rename Binary
         run: mv ${{ matrix.target_path }} ${{ matrix.asset_name }}

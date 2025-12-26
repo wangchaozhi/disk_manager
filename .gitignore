@@ -47,3 +47,4 @@ app.*.map.json
 # Rust Backend
 backed/target/
 backed/**/*.rs.bk
+backed/.git_backup/
